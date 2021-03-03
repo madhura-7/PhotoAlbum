@@ -21,7 +21,7 @@ struct ImageLoaderModel {
 
 class AlbumDetailViewModel {
     var updateUI: ((_ indexPath: IndexPath) -> Void)?
-    var isScrolling: Bool
+    var hasStoppedScrolling: Bool
     private let dataManager: DataManager?
     private let failedImageName = "FailedImage"
     private let selectedAlbum: PhotoAlbumModel?
@@ -47,7 +47,7 @@ class AlbumDetailViewModel {
     required init(_ album: PhotoAlbumModel?, withManager: DataManager = PhotoAlbumDataManager()) {
         dataManager = withManager
         selectedAlbum = album
-        isScrolling = false
+        hasStoppedScrolling = false
     }
 
     func getAlbumPhotos(callback: @escaping(Error?)-> Void) {
@@ -63,6 +63,38 @@ extension AlbumDetailViewModel {
     func setDataSourceIndex(_ indexPath: IndexPath?) {
         currentIndex = indexPath
     }
+
+    func suspendAll() {
+        downloadOperations.imageQueues.isSuspended = true
+    }
+
+    func resumeAll() {
+        downloadOperations.imageQueues.isSuspended = false
+    }
+
+    func loadImagesForOnscreenCells(_ visibleRows: [IndexPath]?) {
+        if let pathsArray = visibleRows {
+            let allPendingOperations = Set(downloadOperations.imagesInProgress.keys)
+            var toBeCancelled = allPendingOperations
+            let visiblePaths = Set(pathsArray)
+            toBeCancelled.subtract(visiblePaths)
+            var toBeStarted = visiblePaths
+            toBeStarted.subtract(allPendingOperations)
+            //Handling Cancel
+            for indexPath in toBeCancelled {
+                if let pendingDownload = downloadOperations.imagesInProgress[indexPath] {
+                    pendingDownload.cancel()
+                }
+                downloadOperations.imagesInProgress.removeValue(forKey: indexPath)
+            }
+            //Handling start
+            for indexPath in toBeStarted {
+                let recordToProcess = allLoaders[indexPath.row]
+                startOperations(for: recordToProcess, at: indexPath)
+            }
+        }
+    }
+
 }
 
 //MARK: Cell Data Source
@@ -77,7 +109,7 @@ extension AlbumDetailViewModel: PhotoCellDataSource {
             case .failed:
                 return UIImage(named: failedImageName)
             case .new:
-                if !isScrolling {
+                if hasStoppedScrolling {
                     startOperations(for: currentImageLoader, at: currentIndex)
                 }
             case .downloaded:

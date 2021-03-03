@@ -56,11 +56,26 @@ extension AlbumDetailViewController: UICollectionViewDataSource, UICollectionVie
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: cellIdentifier, for: indexPath) as! PhotoCell
         viewModel?.setDataSourceIndex(indexPath)
-        viewModel?.isScrolling = !collectionView.isDragging && !collectionView.isDecelerating
+        viewModel?.hasStoppedScrolling = !collectionView.isDragging && !collectionView.isDecelerating
         cell.updateCell(viewModel)
 
         return cell
     }
 
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        viewModel?.suspendAll()
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate {
+            viewModel?.loadImagesForOnscreenCells(albumPhotosCollectionView.indexPathsForVisibleItems)
+            viewModel?.resumeAll()
+        }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        viewModel?.loadImagesForOnscreenCells(albumPhotosCollectionView.indexPathsForVisibleItems)
+        viewModel?.resumeAll()
+    }
 
 }
